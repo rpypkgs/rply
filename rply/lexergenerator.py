@@ -14,14 +14,20 @@ except ImportError:
 from rply.lexer import Lexer
 
 
-class Rule(object):
-    _attrs_ = ['name', 'flags', '_pattern']
+# Prebuilt list for rules which don't push any states.
+NO_STATES = []
 
-    def __init__(self, name, pattern, flags=0):
+class Rule(object):
+    _attrs_ = ['name', 'flags', 'state', 'pop', 'push[:]', '_pattern']
+    _immutable_ = True
+    def __init__(self, name, pattern, flags=0, state=None, pop=False, push=NO_STATES):
         self.name = name
         self.re = re.compile(pattern, flags=flags)
         if rpython:
             self._pattern = get_code(pattern, flags)
+        self.state = state
+        self.pop = pop
+        self.push = push
 
     def _freeze_(self):
         return True
@@ -90,19 +96,24 @@ class LexerGenerator(object):
         self.rules = []
         self.ignore_rules = []
 
-    def add(self, name, pattern, flags=0):
+    def add(self, name, pattern, flags=0, state=None, pop=False, push=NO_STATES):
         """
-        Adds a rule with the given `name` and `pattern`. In case of ambiguity,
-        the first rule added wins.
-        """
-        self.rules.append(Rule(name, pattern, flags=flags))
+        Adds a rule with the given `name` and `pattern`, compiled with the
+        given `flags`. In case of ambiguity, the first rule added wins.
 
-    def ignore(self, pattern, flags=0):
+        If `state` is provided, then this rule will only match when the lexer
+        is in that state. Rules may also change the state; they may `pop` the
+        current state upon matching and/or `push` a list of new states.
+        """
+        self.rules.append(Rule(name, pattern, flags=flags, state=state, pop=pop, push=push))
+
+    def ignore(self, pattern, flags=0, state=None, pop=False, push=NO_STATES):
         """
         Adds a rule whose matched value will be ignored. Ignored rules will be
-        matched before regular ones.
+        matched before regular ones. Accepts the same arguments as `.add()`,
+        except for names.
         """
-        self.ignore_rules.append(Rule("", pattern, flags=flags))
+        self.ignore_rules.append(Rule("", pattern, flags=flags, state=state, pop=pop, push=push))
 
     def build(self):
         """
